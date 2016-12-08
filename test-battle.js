@@ -52,7 +52,7 @@ var enemyMoveFunction = function (gameData, helpers) {
     // var choices = ['North', 'South', 'East', 'West'];
 
     // return choices[Math.floor(Math.random()*4)];
-    return helpers.findNearestHealthWell (gameData);
+    return helpers.getNearestHealthWell(gameData).getDirection();
 };
 
 var currentTurn = 0;
@@ -68,8 +68,10 @@ function gameSetup () {
     game.addHealthWell(2,2);
 
     // Add diamond mines on either side of the health well
+    game.addDiamondMine(2,0);
     game.addDiamondMine(2,1);
     game.addDiamondMine(2,3);
+    game.addDiamondMine(2,4);
 
     // Add your hero in the top left corner of the map (team 0)
     game.addHero(0, 0, 'MyHero', 0);

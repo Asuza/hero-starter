@@ -90,10 +90,8 @@ helpers.findNearestObjectDirectionAndDistance = function (board, fromTile, tileC
 
                 // If we have visited this tile before
                 if (visited.hasOwnProperty(key)) {
-
                     // Do nothing--this tile has already been visited
-
-                // Is this tile the one we want?
+                    // Is this tile the one we want?
                 } else if (isGoalTile) {
 
                     // This variable will eventually hold the first direction we went on this path
@@ -141,109 +139,166 @@ helpers.findNearestObjectDirectionAndDistance = function (board, fromTile, tileC
     return false;
 };
 
-// Returns the direction of the nearest non-team diamond mine or false, if there are no diamond mines
-helpers.findNearestNonTeamDiamondMine = function (gameData) {
-    var hero = gameData.activeHero;
-    var board = gameData.board;
+helpers.getNearestNonTeamDiamondMine = function (gameData, startTile) {
+    startTile = (startTile || gameData.activeHero);
 
-    // Get the path info object
-    var pathInfoObject = helpers.findNearestObjectDirectionAndDistance(board, hero, function (mineTile) {
-        if (mineTile.type === 'DiamondMine') {
-            if (mineTile.owner) {
-                return mineTile.owner.team !== hero.team;
-            } else {
-                return true;
-            }
-        } else {
-            return false;
+    return helpers.nearestTileFilter(gameData, function (tile) {
+        return (tile.type === 'DiamondMine' && !tile.owner || tile.owner.team !== startTile.team);
+    });
+};
+
+helpers.getNearestHealthWell = function (gameData) {
+    return helpers.nearestTileFilter(gameData, function (tile) {
+        return (tile.type === 'HealthWell');
+    });
+};
+
+helpers.getNearestTeamMember = function (gameData, startTile) {
+    startTile = (startTile || gameData.activeHero);
+
+    return helpers.nearestTileFilter(gameData, function (tile) {
+        return (tile.type === 'Hero' && tile.team === startTile.team);
+    });
+};
+
+helpers.nearestTileFilter = function (gameData, filterFn) {
+    var hero = gameData.activeHero,
+        board = gameData.board,
+        result,
+        tileObj;
+
+    result = helpers.findNearestObjectDirectionAndDistance(board, hero, filterFn);
+
+    tileObj = (result || {});
+
+    return {
+        isReachable: function () {
+            return !!result;
+        },
+        getDistance: function () {
+            return tileObj.distance;
+        },
+        getDirection: function () {
+            return tileObj.direction;
+        },
+        canBeKilledNow: function () {
+            return (result && tileObj.health <= 30 && tileObj.distance === 1);
+        },
+        canBeHealedNow: function () {
+            return (result && tileObj.health <= 60 && tileObj.distance === 1);
         }
-    }, board);
-
-    // Return the direction that needs to be taken to achieve the goal
-    return pathInfoObject.direction;
+    };
 };
 
-// Returns the nearest unowned diamond mine or false, if there are no diamond mines
-helpers.findNearestUnownedDiamondMine = function (gameData) {
-    var hero = gameData.activeHero;
-    var board = gameData.board;
+helpers.getNearestWeakerEnemy = function (gameData, startTile) {
+    startTile = (startTile || gameData.activeHero);
 
-    // Get the path info object
-    var pathInfoObject = helpers.findNearestObjectDirectionAndDistance(board, hero, function (mineTile) {
-        if (mineTile.type === 'DiamondMine') {
-            if (mineTile.owner) {
-                return mineTile.owner.id !== hero.id;
-            } else {
-                return true;
-            }
-        } else {
-            return false;
+    return helpers.nearestTileFilter(gameData, function (tile) {
+        return (tile.type === 'Hero' && tile.team !== startTile.team && tile.health < startTile.health);
+    });
+};
+
+helpers.getNearestEnemy = function (gameData, startTile) {
+    startTile = (startTile || gameData.activeHero);
+
+    return helpers.nearestTileFilter(gameData, function (tile) {
+        return (tile.type === 'Hero' && tile.team !== startTile.team);
+    });
+};
+
+/**
+ * Searches for tiles from the starting tile, within the number of steps.
+ * This method does NOT account for objects that may be in the way.
+ * @param  {Game} gameData  The game data.
+ * @param  {Object} [startTile=gameData.activeHero] A tile to start the search from.
+ * @param  {Number} [steps=1]   The maximum number of steps to search.
+ * @param  {Function} filterFn  A function to find tiles with. It is passed a
+ *     single parameter containing the current tile. Return true to include the
+ *     tile in the final results.
+ * @param  {Object} [visited]   Used internally by this method.
+ * @return {Array} The matching tiles.
+ */
+helpers.searchTiles = function (gameData, filterFn, steps, startTile, visited) {
+    var tiles = gameData.board.tiles,
+        matches = [],
+        adjacentTiles = [],
+        currentX,
+        currentY,
+        tileCoordinates,
+        tile,
+        adjacentTile,
+        adjacentMatches;
+
+    startTile = (startTile || gameData.activeHero);
+    filterFn = (filterFn || function () {});
+    visited = (visited || {});
+
+    if (steps === undefined) {
+        steps = 1;
+    }
+
+    currentX = startTile.distanceFromLeft;
+    currentY = startTile.distanceFromTop;
+
+    tile = tiles[currentX][currentY];
+    tileCoordinates = currentX + ',' + currentY;
+
+
+    if (!visited[tileCoordinates]) {
+        visited[tileCoordinates] = true;
+
+        if (filterFn(tile)) {
+            tile.steps = steps;
+            matches.push(tile);
         }
-    });
+    }
 
-    // Return the direction that needs to be taken to achieve the goal
-    return pathInfoObject.direction;
+    if (steps > 0) {
+
+        steps--;
+
+        if (helpers.isValidPoint(gameData, currentX, currentY - 1)) {
+            adjacentTiles.push(tiles[currentX][currentY - 1]); // North
+        }
+
+        if (helpers.isValidPoint(gameData, currentX + 1, currentY)) {
+            adjacentTiles.push(tiles[currentX + 1][currentY]); // East
+        }
+
+        if (helpers.isValidPoint(gameData, currentX, currentY + 1)) {
+            adjacentTiles.push(tiles[currentX][currentY + 1]); // South
+        }
+
+        if (helpers.isValidPoint(gameData, currentX - 1, currentY)) {
+            adjacentTiles.push(tiles[currentX - 1][currentY]); // West
+        }
+
+        for (var i = 0; i < adjacentTiles.length; i++) {
+            adjacentTile = adjacentTiles[i];
+
+            if (adjacentTile && !visited[adjacentTile.distanceFromLeft + ',' + adjacentTile.distanceFromTop]) {
+                adjacentMatches = helpers.searchTiles(gameData, filterFn, steps, adjacentTile, visited);
+
+                if (adjacentMatches.length) {
+                    matches = matches.concat(adjacentMatches);
+                }
+            }
+        }
+    }
+
+    return matches;
 };
 
-// Returns the nearest health well or false, if there are no health wells
-helpers.findNearestHealthWell = function (gameData) {
-    var hero = gameData.activeHero;
-    var board = gameData.board;
+helpers.isValidPoint = function (gameData, x, y) {
 
-    // Get the path info object
-    var pathInfoObject = helpers.findNearestObjectDirectionAndDistance(board, hero, function (healthWellTile) {
-        return healthWellTile.type === 'HealthWell';
-    });
+    var size = gameData.board.lengthOfSide - 1;
 
-    // Return the direction that needs to be taken to achieve the goal
-    return pathInfoObject.direction;
-};
+    if (x < 0 || y < 0 || x > size || y > size) {
+        return false;
+    }
 
-// Returns the direction of the nearest enemy with lower health
-// (or returns false if there are no accessible enemies that fit this description)
-helpers.findNearestWeakerEnemy = function (gameData) {
-    var hero = gameData.activeHero;
-    var board = gameData.board;
+    return true;
 
-    // Get the path info object
-    var pathInfoObject = helpers.findNearestObjectDirectionAndDistance(board, hero, function (enemyTile) {
-        return enemyTile.type === 'Hero' && enemyTile.team !== hero.team && enemyTile.health < hero.health;
-    });
-
-    // Return the direction that needs to be taken to achieve the goal
-    // If no weaker enemy exists, will simply return undefined, which will
-    // be interpreted as "Stay" by the game object
-    return pathInfoObject.direction;
-};
-
-// Returns the direction of the nearest enemy
-// (or returns false if there are no accessible enemies)
-helpers.findNearestEnemy = function (gameData) {
-    var hero = gameData.activeHero;
-    var board = gameData.board;
-
-    // Get the path info object
-    var pathInfoObject = helpers.findNearestObjectDirectionAndDistance(board, hero, function (enemyTile) {
-        return enemyTile.type === 'Hero' && enemyTile.team !== hero.team;
-    });
-
-    // Return the direction that needs to be taken to achieve the goal
-    return pathInfoObject.direction;
-};
-
-// Returns the direction of the nearest friendly champion
-// (or returns false if there are no accessible friendly champions)
-helpers.findNearestTeamMember = function (gameData) {
-    var hero = gameData.activeHero;
-    var board = gameData.board;
-
-    // Get the path info object
-    var pathInfoObject = helpers.findNearestObjectDirectionAndDistance(board, hero, function (heroTile) {
-        return heroTile.type === 'Hero' && heroTile.team === hero.team;
-    });
-
-    // Return the direction that needs to be taken to achieve the goal
-    return pathInfoObject.direction;
 };
 
 module.exports = helpers;
