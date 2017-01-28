@@ -1,12 +1,11 @@
-var moves = {
+let moves = {
     spoonyBard: function (gameData, helpers) {
-        var hero = gameData.activeHero,
-            enemy = helpers.getNearestEnemy(gameData),
-            diamondMine = helpers.getNearestNonTeamDiamondMine(gameData),
-            healthWell = helpers.getNearestHealthWell(gameData),
-            teamMember = helpers.getNearestTeamMember(gameData),
-            diamondMineIsCloserThanEnemy = (diamondMine.isReachable() && diamondMine.getDistance() <= enemy.getDistance()),
-            weakerEnemy;
+        let hero = gameData.activeHero;
+        let enemy = helpers.getNearestEnemy(gameData);
+        let diamondMine = helpers.getNearestNonTeamDiamondMine(gameData);
+        let healthWell = helpers.getNearestHealthWell(gameData);
+        let teamMember = helpers.getNearestTeamMember(gameData);
+        let diamondMineIsCloserThanEnemy = (diamondMine.isReachable() && diamondMine.getDistance() <= enemy.getDistance());
 
         if (hero.health > 30 && enemy.canBeKilledNow()) {
             return enemy.getDirection();
@@ -16,15 +15,16 @@ var moves = {
             return teamMember.getDirection();
         }
 
-        if (hero.health <= 70 && healthWell.isReachable()) {
+        if (hero.health <= 90 && healthWell.getDistance() === 1) {
+            return healthWell.getDirection();
+        } else if (hero.health <= 60 && healthWell.isReachable()) {
             return healthWell.getDirection();
         } else if (!enemy.isReachable() || diamondMineIsCloserThanEnemy) {
             return diamondMine.getDirection();
         }
 
-        weakerEnemy = helpers.getNearestWeakerEnemy(gameData);
-
         // Nearby diamond mines are secure, so go on the offensive.
+        let weakerEnemy = helpers.getNearestWeakerEnemy(gameData);
         if (weakerEnemy.getDistance() <= enemy.getDistance()) {
             return weakerEnemy.getDirection();
         } else if (enemy) {
